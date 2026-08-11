@@ -1,0 +1,44 @@
+plugins {
+    id 'org.springframework.boot' version '3.5.4' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
+}
+
+// 모든 하위 모듈(서비스)에 공통으로 적용되는 설정
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+
+    group = 'com.kosta'
+    version = '0.0.1-SNAPSHOT'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    // Spring Cloud 버전을 한 곳에서 관리 (BOM)
+    ext {
+        set('springCloudVersion', '2025.0.0')
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+        }
+    }
+
+    dependencies {
+        // 모든 모듈이 actuator로 상태 확인 가능하게
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+}

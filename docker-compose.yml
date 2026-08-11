@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: kosta
+      POSTGRES_USER: kosta
+      POSTGRES_PASSWORD: kosta
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kosta"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── 서비스 레지스트리 (서비스보다 먼저 떠야 함) ──
+  discovery:
+    build:
+      context: .
+      dockerfile: discovery/Dockerfile
+    ports:
+      - "8761:8761"
+    environment:
+      EUREKA_HOST: discovery
+
+  # ── API 게이트웨이 (프론트 요청의 입구) ──
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      # 컨테이너 안에서는 서비스 이름(discovery)으로 서로를 찾는다
+      EUREKA_URL: http://discovery:8761/eureka/
+    depends_on:
+      - discovery
+
+  # ── 아래는 분리 단계마다 주석을 풀어 추가한다 ──
+  #
+  # auth-service:
+  #   build:
+  #     context: .
+  #     dockerfile: auth-service/Dockerfile
+  #   environment:
+  #     EUREKA_URL: http://discovery:8761/eureka/
+  #     DB_URL: jdbc:postgresql://db:5432/kosta
+  #     DB_USER: kosta
+  #     DB_PASSWORD: kosta
+  #   depends_on:
+  #     - discovery
+  #     - db
+
+volumes:
+  db-data:

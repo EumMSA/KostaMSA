@@ -1,0 +1,6 @@
+dependencies {
+    // Spring Cloud Gateway (WebFlux 기반 리액티브 게이트웨이)
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
+    // Eureka에서 서비스 위치를 찾아 라우팅하기 위한 클라이언트
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+}
