@@ -1,31 +1,79 @@
 package com.oopsw.gatewayservice.filter;
 
-import org.springframework.core.Ordered;
-import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.auth0.jwt.exceptions.TokenExpiredException;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-// 모든 요청이 지나가는 전역 필터.
-// 0단계에서는 통과만 시킨다. 1단계(Auth 분리)에서 이 안에
-// "토큰 검증 → 사용자 정보(bId 등)를 헤더에 실어 하위 서비스로 전달"을 채운다.
-//
-// 여기로 JWT 검증을 끌어올리면 5개 서비스가 각자 검증할 필요가 없어진다.
+import java.nio.charset.StandardCharsets;
+
 @Component
 public class JwtAuthFilter implements GlobalFilter, Ordered {
 
+    private static final String HEADER = "Authorization";
+    private static final String PREFIX = "Bearer ";
+    private static final String WHITELIST_PREFIX = "/api/auth";
+
+    private final Algorithm algorithm;
+
+    public JwtAuthFilter(@Value("${jwt.secret}") String secret) {
+        this.algorithm = Algorithm.HMAC256(secret.getBytes(StandardCharsets.UTF_8));
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // TODO(1단계): Authorization 헤더에서 토큰 추출 → 검증 →
-        //   실패 시 401 응답, 성공 시 exchange.mutate()로 X-User-Id 등 헤더 주입.
-        //   로그인/회원가입 등 인증 예외 경로는 화이트리스트로 통과.
-        return chain.filter(exchange);
+        String path = exchange.getRequest().getURI().getPath();
+        if (path.startsWith(WHITELIST_PREFIX)) {
+            return chain.filter(exchange);
+        }
+
+        String header = exchange.getRequest().getHeaders().getFirst(HEADER);
+        if (header == null || !header.startsWith(PREFIX)) {
+            return unauthorized(exchange, null);
+        }
+
+        String token = header.substring(PREFIX.length());
+
+        try {
+            DecodedJWT decoded = JWT.require(algorithm).build().verify(token);
+            String username = decoded.getSubject();
+            String role = decoded.getClaim("role").asString();
+
+            ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+                    .header("X-User-Id", username)
+                    .header("X-User-Role", role)
+                    .build();
+
+            return chain.filter(exchange.mutate().request(mutatedRequest).build());
+        } catch (TokenExpiredException e) {
+            return unauthorized(exchange, "expired");
+        } catch (JWTVerificationException e) {
+            return unauthorized(exchange, "invalid");
+        }
+    }
+
+    private Mono<Void> unauthorized(ServerWebExchange exchange, String tokenStatus) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        if (tokenStatus != null) {
+            response.getHeaders().add("Token-Status", tokenStatus);
+        }
+        return response.setComplete();
     }
 
     @Override
     public int getOrder() {
-        // 낮을수록 먼저 실행. 라우팅보다 앞에서 검증하도록 음수로 둔다.
         return -1;
     }
 }

@@ -5,7 +5,7 @@ include 'discovery'
 include 'gateway'
 
 // 서비스는 분리 단계마다 아래에 하나씩 추가한다
-// include 'auth-service'
+include 'auth-service'
 // include 'inventory-service'
 // include 'sales-service'
 // include 'notice-service'

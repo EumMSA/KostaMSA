@@ -15,11 +15,10 @@ spring:
       routes:
         # 서비스를 분리할 때마다 아래처럼 명시적 라우팅을 추가한다.
         # lb://는 Eureka에서 그 이름의 서비스를 찾아 로드밸런싱한다는 뜻.
-        #
-        # - id: auth-service
-        #   uri: lb://AUTH-SERVICE
-        #   predicates:
-        #     - Path=/api/auth/**
+        - id: auth-service
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/api/auth/**
         #
         # - id: inventory-service
         #   uri: lb://INVENTORY-SERVICE
@@ -43,3 +42,6 @@ management:
       exposure:
         # 게이트웨이에 실제로 등록된 라우팅을 확인하는 용도
         include: health,gateway
+
+jwt:
+  secret: ${JWT_SECRET}
