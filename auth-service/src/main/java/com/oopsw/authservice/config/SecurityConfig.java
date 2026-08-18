@@ -1,8 +1,8 @@
 package com.oopsw.authservice.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oopsw.authservice.filter.GatewayAuthenticationFilter;
 import com.oopsw.authservice.filter.JwtAuthenticationFilter;
-import com.oopsw.authservice.filter.JwtAuthorizationFilter;
 import com.oopsw.authservice.service.AuthService;
 import com.oopsw.authservice.support.JwtProvider;
 import com.oopsw.authservice.userdetails.AccountDetailsService;
@@ -20,14 +20,20 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.filter.CorsFilter;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * auth-service는 토큰 "발급"만 담당한다.
+ * 토큰 "검증"은 게이트웨이(JwtAuthFilter)가 하고, 그 결과를
+ * X-User-Id / X-User-Role 헤더로 받아 GatewayAuthenticationFilter가 인증을 세운다.
+ *
+ * CORS도 게이트웨이가 처리하므로 여기서는 설정하지 않는다.
+ */
 @Slf4j
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
-    private final CorsFilter corsFilter;
     private final JwtProvider jwtProvider;
     private final AuthService authService;
     private final ObjectMapper objectMapper;
@@ -58,31 +64,35 @@ public class SecurityConfig {
 
         http
             .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .requestCache(cache -> cache.disable())
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .logout(logout -> logout.disable())
 
-            .addFilter(corsFilter)
+            // 게이트웨이가 넘긴 헤더로 인증을 세운다 (로그인 요청에는 헤더가 없으므로 그냥 통과).
+            .addFilterBefore(new GatewayAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+            // 로그인(/api/auth/login)을 처리하고 토큰을 발급한다.
             .addFilter(new JwtAuthenticationFilter(authenticationManager, jwtProvider, authService, objectMapper))
-            .addFilter(new JwtAuthorizationFilter(authenticationManager, jwtProvider))
 
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                     "/api/auth/login",
-                     "/api/auth/reissue",
-                     "/api/auth/logout"
-                 ).permitAll()
+                    .requestMatchers(
+                            "/api/auth/login",
+                            "/api/auth/reissue",
+                            "/api/auth/logout"
+                    ).permitAll()
+                    // 컨테이너 헬스체크용
+                    .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                     .anyRequest().authenticated()
-                )
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(
-                        (request, response, authException) -> {
-                            log.error("[SecurityConfig] .exceptionHandling : " + authException.getMessage());
-                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            response.getWriter().write("{\"message\":\"authentication required\"}");
-                        }));
+            )
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(
+                    (request, response, authException) -> {
+                        log.error("[SecurityConfig] .exceptionHandling : " + authException.getMessage());
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                        response.getWriter().write("{\"message\":\"authentication required\"}");
+                    }));
 
         return http.build();
     }

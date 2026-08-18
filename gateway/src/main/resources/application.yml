@@ -8,10 +8,9 @@ spring:
     gateway:
       discovery:
         locator:
-          # Eureka에 등록된 서비스 이름으로 자동 라우팅을 켠다.
-          # 예: http://localhost:9000/auth-service/** -> AUTH 서비스로
-          enabled: true
-          lower-case-service-id: true
+          # 끔. 켜면 Eureka에 등록된 모든 서비스가 /서비스이름/** 로 자동 노출되어
+          # 아래 명시적 라우팅을 우회하는 경로가 생긴다.
+          enabled: false
       routes:
         # 서비스를 분리할 때마다 아래처럼 명시적 라우팅을 추가한다.
         # lb://는 Eureka에서 그 이름의 서비스를 찾아 로드밸런싱한다는 뜻.
@@ -20,15 +19,25 @@ spring:
           predicates:
             - Path=/api/auth/**
         #
-        # - id: inventory-service
+        # - id: statistics-service          # 2단계
+        #   uri: lb://STATISTICS-SERVICE
+        #   predicates:
+        #     - Path=/api/statistics/**
+        #
+        # - id: notice-service              # 3단계
+        #   uri: lb://NOTICE-SERVICE
+        #   predicates:
+        #     - Path=/api/notice/**,/api/disposal-items/**
+        #
+        # - id: inventory-service           # 4단계
         #   uri: lb://INVENTORY-SERVICE
         #   predicates:
         #     - Path=/api/foodmaterials/**
         #
-        # - id: sales-service
+        # - id: sales-service               # 4단계
         #   uri: lb://SALES-SERVICE
         #   predicates:
-        #     - Path=/api/menus/**, /api/sales/**
+        #     - Path=/api/menus/**,/api/sales/**
 
 eureka:
   client:
