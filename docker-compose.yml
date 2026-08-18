@@ -9,6 +9,8 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
+      # 컨테이너를 처음 만들 때 한 번만 실행되는 초기화 스크립트 (db/init/README.md 참고)
+      - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kosta"]
       interval: 5s
@@ -35,7 +37,7 @@ services:
     environment:
       # 컨테이너 안에서는 서비스 이름(discovery)으로 서로를 찾는다
       EUREKA_URL: http://discovery:8761/eureka/
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET이 필요하다. .env.example을 .env로 복사할 것}
     depends_on:
       - discovery
 
@@ -51,10 +53,13 @@ services:
       DB_URL: jdbc:postgresql://db:5432/kosta
       DB_USER: kosta
       DB_PASSWORD: kosta
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET이 필요하다. .env.example을 .env로 복사할 것}
     depends_on:
-      - discovery
-      - db
+      discovery:
+        condition: service_started
+      db:
+        # 포트만 열린 게 아니라 실제로 접속 가능해질 때까지 기다린다
+        condition: service_healthy
 
 volumes:
   db-data:
